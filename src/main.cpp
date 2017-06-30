@@ -16,6 +16,7 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+double mph2mps(double v) { return v * 0.44704; }
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -124,36 +125,33 @@ int main() {
           * Both are in between [-1, 1].
           *
           */
-          // predict state in 100ms latency
+          // predict state after 100ms latency in vehicle coordinates.
+          v = mph2mps(v);
           double latency = 0.1;
-          double x = px + v * latency * cos(psi);
-          double y = py + v * latency * sin(psi);
-          double psi2 = psi - v * sa / Lf * latency;
-          double v2 = v + th * latency * 100;
+          double x = v * latency * cos(0.0);
+          double y = v * latency * sin(0.0);
+          double psi2 = -v * sa / Lf * latency;
+          double v2 = v + th * latency;
           
-          // Transform Vehicle reference coordinates.
-          vector<double> pos_temp = TransformObs(x, y, px, py, psi);
-          x = pos_temp[0];
-          y = pos_temp[1];
-          
+          // Transform waypoints to vehicle coordinates.
           Eigen::VectorXd ptsx_v(ptsx.size());
           Eigen::VectorXd ptsy_v(ptsy.size());
-          
+          vector <double> pos_temp;
           for (int i = 0; i < ptsx.size(); i++) {
             pos_temp = TransformObs(ptsx[i], ptsy[i], px, py, psi);
             ptsx_v[i] = pos_temp[0];
             ptsy_v[i] = pos_temp[1];
           }
           
-          Eigen::VectorXd coeffs = polyfit(ptsx_v, ptsy_v, 3);
+          Eigen::VectorXd coeffs = polyfit(ptsx_v, ptsy_v, 2);
           
-          double cte = polyeval(coeffs, 0) - y;
+          double cte = polyeval(coeffs, x) - y;
           
-          double epsi = 0.0 - atan(polytan(coeffs, 0));
+          double epsi = psi2 - atan(polytan(coeffs, x));
           
           Eigen::VectorXd state(6);
           
-          state << x, y, psi2-psi, v2, cte, epsi;
+          state << x, y, psi2, v2, cte, epsi;
           
           auto vars = mpc.Solve(state, coeffs);
           
